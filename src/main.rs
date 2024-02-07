@@ -1,5 +1,5 @@
 use clap::Parser;
-use hypher::{hyphenate, Lang};
+use hypher::Lang;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -8,15 +8,161 @@ struct Args {
     #[arg(short, long)]
     language: String,
 
-    #[arg(short, long, default_value = "-")]
-    delimiter: String,
+    /// Delimiter to use to separate syllables or in hyphenation, if set without --width, all syllables will be marked with this separator
+    #[arg(short, long)]
+    delimiter: Option<String>,
+
+    /// Width to hyphenate the text on (if set), the width should be in unicode character points, not bytes nor taking double-spaced characters into account)
+    #[arg(short, long)]
+    width: Option<u8>,
+
+    /// Output syllable information as stand-off annotations (offsets are unicode points, 0-indexed, end non-inclusive).
+    #[arg(short, long)]
+    standoff: bool,
 
     /// Plain text files (UTF-8 Encoded) to use as input
     input: Vec<String>,
 }
 
+fn syllabify(text: &str, language: Lang, delimiter: &str) {
+    let mut beginbyte = 0;
+    let mut bytepos = 0;
+    let mut alphabetic_mode = true;
+    for c in text.chars() {
+        if !c.is_alphabetic() && alphabetic_mode {
+            if beginbyte < bytepos {
+                let word = &text[beginbyte..bytepos];
+                let syllables = hypher::hyphenate(word, language);
+                print!("{}", syllables.join(delimiter));
+            }
+            alphabetic_mode = false;
+            beginbyte = bytepos;
+        } else if c.is_alphabetic() && !alphabetic_mode {
+            alphabetic_mode = true;
+            if beginbyte < bytepos {
+                print!("{}", &text[beginbyte..bytepos]);
+            }
+            beginbyte = bytepos;
+        }
+        bytepos += c.len_utf8();
+    }
+    if beginbyte < bytepos {
+        let word = &text[beginbyte..];
+        if alphabetic_mode {
+            let syllables = hypher::hyphenate(word, language);
+            print!("{}", syllables.join(delimiter));
+        } else {
+            print!("{}", word);
+        }
+    }
+}
+
+fn standoff(text: &str, language: Lang) {
+    println!("Text\tBeginOffset\tEndOffset");
+    let mut beginbyte = 0;
+    let mut bytepos = 0;
+    let mut alphabetic_mode = true;
+    let mut begincharpos = 0;
+    for (i, c) in text.chars().enumerate() {
+        if !c.is_alphabetic() && alphabetic_mode {
+            if beginbyte < bytepos {
+                let word = &text[beginbyte..bytepos];
+                for syllable in hypher::hyphenate(word, language) {
+                    println!(
+                        "{}\t{}\t{}",
+                        syllable,
+                        begincharpos,
+                        begincharpos + syllable.len()
+                    );
+                    begincharpos += syllable.len();
+                }
+            }
+            alphabetic_mode = false;
+            beginbyte = bytepos;
+            begincharpos = i;
+        } else if c.is_alphabetic() && !alphabetic_mode {
+            alphabetic_mode = true;
+            beginbyte = bytepos;
+            begincharpos = i;
+        }
+        bytepos += c.len_utf8();
+    }
+    if beginbyte < bytepos {
+        let word = &text[beginbyte..];
+        if alphabetic_mode {
+            for syllable in hypher::hyphenate(word, language) {
+                println!(
+                    "{}\t{}\t{}",
+                    syllable,
+                    begincharpos,
+                    begincharpos + syllable.len()
+                );
+                begincharpos += syllable.len();
+            }
+        }
+    }
+}
+
+fn hyphenate(text: &str, language: Lang, width: u8, delimiter: &str) {
+    let mut beginbyte = 0;
+    let mut bytepos = 0;
+    let mut alphabetic_mode = true;
+    let mut charpos: usize = 0;
+    for c in text.chars() {
+        if !c.is_alphabetic() && alphabetic_mode {
+            if beginbyte < bytepos {
+                let word = &text[beginbyte..bytepos];
+                for (i, syllable) in hypher::hyphenate(word, language).enumerate() {
+                    if charpos >= width as usize {
+                        if i == 0 {
+                            println!();
+                        } else {
+                            println!("{}", delimiter);
+                        }
+                        charpos = 0;
+                    }
+                    print!("{}", syllable);
+                    charpos += syllable.len();
+                }
+            }
+            alphabetic_mode = false;
+            beginbyte = bytepos;
+        } else if c.is_alphabetic() && !alphabetic_mode {
+            alphabetic_mode = true;
+            if beginbyte < bytepos {
+                let subtext = &text[beginbyte..bytepos];
+                if charpos + subtext.len() > width as usize {
+                    println!();
+                    charpos = 0;
+                    print!("{}", subtext.trim_start());
+                } else {
+                    print!("{}", subtext);
+                }
+                charpos += subtext.len();
+            }
+            beginbyte = bytepos;
+        }
+        bytepos += c.len_utf8();
+    }
+    if beginbyte < bytepos {
+        let word = &text[beginbyte..];
+        for (i, syllable) in hypher::hyphenate(word, language).enumerate() {
+            if charpos >= width as usize {
+                if i == 0 {
+                    println!();
+                } else {
+                    println!("{}", delimiter);
+                }
+                charpos = 0;
+            }
+            print!("{}", syllable);
+            charpos += syllable.len();
+        }
+    }
+}
+
 fn main() {
-    let args = Args::parse();
+    let mut args = Args::parse();
 
     let language = match args.language.as_str() {
         "af" => Lang::Afrikaans,
@@ -58,6 +204,10 @@ fn main() {
         }
     };
 
+    if args.delimiter.is_none() && args.width.is_none() && !args.standoff {
+        args.delimiter = Some("-".to_string());
+    }
+
     for filename in args.input.iter() {
         let text = std::fs::read_to_string(filename)
             .map_err(|err| {
@@ -65,35 +215,17 @@ fn main() {
                 std::process::exit(1);
             })
             .unwrap();
-        let mut beginbyte = 0;
-        let mut bytepos = 0;
-        let mut alphabetic_mode = true;
-        for c in text.chars() {
-            if !c.is_alphabetic() && alphabetic_mode {
-                if beginbyte < bytepos {
-                    let word = &text[beginbyte..bytepos];
-                    let syllables = hyphenate(word, language);
-                    print!("{}", syllables.join("-"));
-                }
-                alphabetic_mode = false;
-                beginbyte = bytepos;
-            } else if c.is_alphabetic() && !alphabetic_mode {
-                alphabetic_mode = true;
-                if beginbyte < bytepos {
-                    print!("{}", &text[beginbyte..bytepos]);
-                }
-                beginbyte = bytepos;
-            }
-            bytepos += c.len_utf8();
-        }
-        if beginbyte < bytepos {
-            let word = &text[beginbyte..];
-            if alphabetic_mode {
-                let syllables = hyphenate(word, language);
-                print!("{}", syllables.join(args.delimiter.as_str()));
-            } else {
-                print!("{}", word);
-            }
+        if args.standoff {
+            standoff(text.as_str(), language);
+        } else if let Some(width) = args.width.as_ref() {
+            hyphenate(
+                text.as_str(),
+                language,
+                *width,
+                args.delimiter.as_ref().map(|x| x.as_str()).unwrap_or("-"),
+            );
+        } else if let Some(delimiter) = args.delimiter.as_ref() {
+            syllabify(text.as_str(), language, delimiter);
         }
     }
 }

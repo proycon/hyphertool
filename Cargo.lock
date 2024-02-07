@@ -110,7 +110,7 @@ checksum = "94bf16dd62ea2bec617a6f8a3e1ba03107311783069a647787ac689d1f35321e"
 
 [[package]]
 name = "hyphertool"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "hypher",
