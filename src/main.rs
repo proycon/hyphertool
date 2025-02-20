@@ -23,7 +23,7 @@ struct Args {
 
     /// Characters that are considered 'hyphen' and will be dehyphenatated at the end of a line. Multiple characters may be specified, they will be considered individually. Note that dehyhenation currently does not use the -l parameter, even though it must be set.
     #[arg(short = 'D', long)]
-    dehyphenation: Option<String>,
+    dehyphenate: Option<String>,
 
     /// Characters that are considered 'hyphen' and will be dehyphenatated at the beginning of a line. Multiple characters may be specified, they will be considered individually.
     #[arg(short = 'P', long)]
@@ -267,7 +267,7 @@ fn main() {
                 *width,
                 args.delimiter.as_ref().map(|x| x.as_str()).unwrap_or("-"),
             );
-        } else if let Some(dehyphens) = args.dehyphenation.as_ref() {
+        } else if let Some(dehyphens) = args.dehyphenate.as_ref() {
             dehyphenate(
                 text.as_str(),
                 &dehyphens,

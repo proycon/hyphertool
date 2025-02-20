@@ -78,3 +78,16 @@ re	92	94
 sul	94	97
 taat	97	101
 ```
+
+### Dehyphenation
+
+This tool can also be used for simple dehyphenation. The `--language` parameter is not actually implemented for this so this is not a lexical-informed dehyphenation. The mode is triggered by specifying one or more characters to dehyphenate on via `--dehyphenate`. We take the output of our earlier hyphenation test as input again:
+
+```
+$ hyphertool --language nl --dehyphenate - test2.txt                                                       ❌2 
+Dit is een testbestand. Kan je
+dit bestand mooi
+voor mij verwerken?
+Ik hoop op
+een positief resultaat.
+```
