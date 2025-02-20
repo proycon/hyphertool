@@ -211,6 +211,7 @@ fn main() {
         "af" => Lang::Afrikaans,
         "be" => Lang::Belarusian,
         "bg" => Lang::Bulgarian,
+        "ca" => Lang::Catalan,
         "cs" => Lang::Czech,
         "da" => Lang::Danish,
         "de" => Lang::German,
