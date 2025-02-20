@@ -2,6 +2,8 @@ use clap::Parser;
 use hypher::Lang;
 use std::io::{self, Write};
 
+const EOLCHARS: [char; 2] = ['\r', '\n'];
+
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
@@ -182,15 +184,19 @@ fn dehyphenate(text: &str, hyphens: &str, prefix_hyphens: Option<&str>) {
     };
     for mut token in text.split_inclusive(|c: char| c.is_whitespace()) {
         if prevtoken.is_some() {
-            if dehyphenate {
+            if dehyphenate && !prefix_hyphens.is_empty() {
                 token = token.trim_start_matches(&prefix_hyphens[..]);
             }
             stdout
                 .write(prevtoken.unwrap().as_bytes())
                 .expect("failure writing to stdout");
         }
-        if token.ends_with('\n') && token.trim_end_matches('\n').ends_with(&hyphens[..]) {
-            prevtoken = Some(token.trim_end_matches('\n').trim_end_matches(&hyphens[..]));
+        if token.ends_with(&EOLCHARS) && token.trim_end_matches(&EOLCHARS).ends_with(&hyphens[..]) {
+            prevtoken = Some(
+                token
+                    .trim_end_matches(&EOLCHARS)
+                    .trim_end_matches(&hyphens[..]),
+            );
             dehyphenate = true;
         } else {
             prevtoken = Some(token);
