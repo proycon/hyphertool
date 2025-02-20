@@ -1,5 +1,6 @@
 use clap::Parser;
 use hypher::Lang;
+use std::io::{self, Write};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -19,6 +20,14 @@ struct Args {
     /// Output syllable information as stand-off annotations (offsets are unicode points, 0-indexed, end non-inclusive).
     #[arg(short, long)]
     standoff: bool,
+
+    /// Characters that are considered 'hyphen' and will be dehyphenatated at the end of a line. Multiple characters may be specified, they will be considered individually. Note that dehyhenation currently does not use the -l parameter, even though it must be set.
+    #[arg(short = 'D', long)]
+    dehyphenation: Option<String>,
+
+    /// Characters that are considered 'hyphen' and will be dehyphenatated at the beginning of a line. Multiple characters may be specified, they will be considered individually.
+    #[arg(short = 'P', long)]
+    prefix_dehyphenation: Option<String>,
 
     /// Plain text files (UTF-8 Encoded) to use as input
     input: Vec<String>,
@@ -161,6 +170,40 @@ fn hyphenate(text: &str, language: Lang, width: u8, delimiter: &str) {
     }
 }
 
+fn dehyphenate(text: &str, hyphens: &str, prefix_hyphens: Option<&str>) {
+    let mut prevtoken: Option<&str> = None;
+    let mut dehyphenate = false;
+    let mut stdout = io::stdout().lock();
+    let hyphens: Vec<char> = hyphens.chars().collect();
+    let prefix_hyphens: Vec<char> = if let Some(prefix_hyphens) = prefix_hyphens {
+        prefix_hyphens.chars().collect()
+    } else {
+        Vec::new()
+    };
+    for mut token in text.split_inclusive(|c: char| c.is_whitespace()) {
+        if prevtoken.is_some() {
+            if dehyphenate {
+                token = token.trim_start_matches(&prefix_hyphens[..]);
+            }
+            stdout
+                .write(prevtoken.unwrap().as_bytes())
+                .expect("failure writing to stdout");
+        }
+        if token.ends_with('\n') && token.trim_end_matches('\n').ends_with(&hyphens[..]) {
+            prevtoken = Some(token.trim_end_matches('\n').trim_end_matches(&hyphens[..]));
+            dehyphenate = true;
+        } else {
+            prevtoken = Some(token);
+            dehyphenate = false;
+        }
+    }
+    if let Some(prevtoken) = prevtoken {
+        stdout
+            .write(prevtoken.as_bytes())
+            .expect("failure writing to stdout");
+    }
+}
+
 fn main() {
     let mut args = Args::parse();
 
@@ -224,6 +267,12 @@ fn main() {
                 *width,
                 args.delimiter.as_ref().map(|x| x.as_str()).unwrap_or("-"),
             );
+        } else if let Some(dehyphens) = args.dehyphenation.as_ref() {
+            dehyphenate(
+                text.as_str(),
+                &dehyphens,
+                args.prefix_dehyphenation.as_ref().map(|x| x.as_str()),
+            )
         } else if let Some(delimiter) = args.delimiter.as_ref() {
             syllabify(text.as_str(), language, delimiter);
         }
