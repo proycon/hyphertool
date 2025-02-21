@@ -182,7 +182,7 @@ fn dehyphenate(text: &str, hyphens: &str, prefix_hyphens: Option<&str>) {
     } else {
         Vec::new()
     };
-    for mut token in text.split_inclusive(|c: char| c.is_whitespace()) {
+    for mut token in text.split_inclusive(|c: char| (c.is_whitespace() && c != '\r')) {
         if prevtoken.is_some() {
             if dehyphenate && !prefix_hyphens.is_empty() {
                 token = token.trim_start_matches(&prefix_hyphens[..]);
